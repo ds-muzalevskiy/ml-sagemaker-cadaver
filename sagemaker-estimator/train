@@ -1,0 +1,85 @@
+#!/usr/bin/env python
+
+from __future__ import print_function
+
+import os
+import json
+import pickle
+import sys
+import traceback
+
+import pandas as pd
+
+#from sklearn import tree
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.ensemble import VotingClassifier
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.model_selection import GridSearchCV
+
+prefix = '/opt/ml/'
+
+input_path = prefix + 'input/data'
+output_path = os.path.join(prefix, 'output')
+model_path = os.path.join(prefix, 'model')
+
+channel_name='training'
+training_path = os.path.join(input_path, channel_name)
+
+
+def train():
+    features = [
+        'age',
+        'high_blood_pressure',
+        'serum_sodium',
+        'smoking',
+        'anaemia',
+        'creatinine_phosphokinase',
+        'diabetes',
+        'ejection_fraction',
+        'platelets',
+        'serum_creatinine',
+        'sex',
+        'time',
+    ]
+
+    target_variable = 'DEATH_EVENT'
+    
+    input_files = [ os.path.join(training_path, file) for file in os.listdir(training_path) ]
+    if len(input_files) == 0:
+        raise ValueError(('error').format(training_path, channel_name))
+    raw_data = [
+        pd.read_csv(
+            file,
+            header=None,
+            names=features + [target_variable],
+            sep=','
+        )
+        for file
+        in input_files
+    ]
+    train_data = pd.concat(raw_data)
+
+    first_column = train_data.pop(target_variable)
+    train_data.insert(0, target_variable, first_column)
+
+    train_y = train_data.iloc[:,0]
+    train_X = train_data.iloc[:,1:]
+    
+    clf = VotingClassifier(estimators=[ 
+    ('svm', SVC(probability=True)), 
+    ('lr', LogisticRegression()), 
+    ('rf', RandomForestClassifier())], voting='soft')
+    
+    grid = clf.fit(train_X, train_y)
+    
+    with open(os.path.join(model_path, 'ml-model.pkl'), 'wb') as out:
+        pickle.dump(grid, out)
+        print('Training complete.')
+        
+
+if __name__ == '__main__':
+    train()
+
+    sys.exit(0)
